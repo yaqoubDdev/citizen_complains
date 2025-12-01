@@ -1,6 +1,6 @@
-import { Problem } from "./types"
+import { Problem, User } from "./types"
 
-export const MOCK_PROBLEMS: Problem[] = [
+export let PROBLEMS: Problem[] = [
     {
         id: "1",
         title: "Broken Street Light",
@@ -45,5 +45,16 @@ export const MOCK_PROBLEMS: Problem[] = [
         status: "in-progress",
         createdAt: "2023-10-27T14:15:00Z",
         imageUrl: "https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?auto=format&fit=crop&q=80&w=1000",
+    },
+]
+
+export const MOCK_USERS: User[] = [
+    {
+        username: "citizen1",
+        password: "password123",
+    },
+    {
+        username: "admin",
+        password: "adminpassword",
     },
 ]

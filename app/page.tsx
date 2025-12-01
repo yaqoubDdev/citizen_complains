@@ -1,27 +1,28 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import dynamic from "next/dynamic"
 import { Header } from "@/components/header"
 import { ProblemList } from "@/components/problem-list"
 import { ReportModal } from "@/components/report-modal"
-import { MOCK_PROBLEMS } from "@/lib/data"
 import { Problem } from "@/lib/types"
+import { useAuth } from "@/lib/auth-context"
 
-// Dynamically import MapView to avoid SSR issues with Leaflet
-const MapView = dynamic(() => import("@/components/map-view"), {
-  ssr: false,
-  loading: () => (
-    <div className="flex h-full w-full items-center justify-center bg-muted">
-      <p className="text-muted-foreground">Loading map...</p>
-    </div>
-  ),
-})
+
 
 export default function Home() {
-  const [problems, setProblems] = useState<Problem[]>(MOCK_PROBLEMS)
+  const [problems, setProblems] = useState<Problem[]>([])
+  const { user } = useAuth()
+
+  useEffect(() => {
+    fetch("/api/problems")
+      .then((res) => res.json())
+      .then((data) => setProblems(data))
+      .catch((err) => console.error("Failed to fetch problems", err))
+  }, [])
 
   const handleUpvote = (id: string) => {
+    // In a real app, we would call an API here
     setProblems((prev) =>
       prev
         .map((p) => (p.id === id ? { ...p, upvotes: p.upvotes + 1 } : p))
@@ -29,40 +30,59 @@ export default function Home() {
     )
   }
 
-  const handleReportSubmit = (data: any) => {
-    const newProblem: Problem = {
-      id: Math.random().toString(36).substr(2, 9),
-      ...data,
-      upvotes: 0,
-      status: "open",
-      createdAt: new Date().toISOString(),
+  const handleReportSubmit = async (data: any) => {
+    if (!user) {
+      alert("You must be logged in to report a problem.")
+      return
     }
-    setProblems((prev) => [newProblem, ...prev])
+
+    try {
+      const res = await fetch("/api/problems", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      })
+
+      if (res.ok) {
+        const newProblem = await res.json()
+        setProblems((prev) => [newProblem, ...prev])
+      } else {
+        alert("Failed to report problem")
+      }
+    } catch (err) {
+      console.error("Error reporting problem", err)
+      alert("Error reporting problem")
+    }
   }
 
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="flex min-h-screen flex-col bg-muted/10">
       <Header />
-      <main className="flex flex-1 flex-col md:flex-row overflow-hidden h-[calc(100vh-3.5rem)]">
-        {/* Map Section - Takes full width on mobile, 60% on desktop */}
-        <div className="relative h-[50vh] w-full md:h-full md:w-[60%] lg:w-[70%] border-b md:border-b-0 md:border-r">
-          <MapView problems={problems} />
-          <div className="absolute bottom-6 right-6 z-[1000]">
-            <ReportModal onSubmit={handleReportSubmit} />
+      <main className="container max-w-2xl py-6">
+        <div className="mb-6 flex items-center justify-between rounded-lg border bg-card p-4 shadow-sm">
+          <div className="flex items-center space-x-4">
+            <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+              <span className="text-lg font-bold text-primary">
+                {user ? user.username[0].toUpperCase() : "?"}
+              </span>
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-medium">
+                {user ? `What's happening, ${user.username}?` : "Log in to report a problem"}
+              </p>
+            </div>
           </div>
+          <ReportModal onSubmit={handleReportSubmit} />
         </div>
 
-        {/* Feed Section - Takes full width on mobile, 40% on desktop */}
-        <div className="flex h-[50vh] w-full flex-col bg-background md:h-full md:w-[40%] lg:w-[30%]">
-          <div className="border-b p-4">
-            <h2 className="text-lg font-semibold">Local Problems</h2>
-            <p className="text-sm text-muted-foreground">
-              {problems.length} reports in your area
-            </p>
+        <div className="space-y-6">
+          <div className="flex items-center justify-between px-2">
+            <h2 className="text-xl font-bold tracking-tight">Recent Reports</h2>
+            <span className="text-sm text-muted-foreground">
+              {problems.length} reports
+            </span>
           </div>
-          <div className="flex-1 overflow-y-auto">
-            <ProblemList problems={problems} onUpvote={handleUpvote} />
-          </div>
+          <ProblemList problems={problems} onUpvote={handleUpvote} />
         </div>
       </main>
     </div>

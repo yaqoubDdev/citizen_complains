@@ -13,3 +13,8 @@ export interface Problem {
     createdAt: string
     imageUrl?: string
 }
+
+export interface User {
+    username: string
+    password?: string // In real app, never store plain text
+}
