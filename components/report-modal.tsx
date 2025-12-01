@@ -1,6 +1,4 @@
-"use client"
-
-import { useState } from "react"
+import { useState, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
@@ -14,7 +12,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Plus, Upload, Mic, Video } from "lucide-react"
+import { Plus, Upload, Mic, Video, X, StopCircle, Loader2, MapPin, Trash2, Lightbulb, Shield, HelpCircle, Camera } from "lucide-react"
 
 interface ReportModalProps {
     onSubmit: (data: any) => void
@@ -27,99 +25,276 @@ export function ReportModal({ onSubmit }: ReportModalProps) {
     const [category, setCategory] = useState("infrastructure")
     const [address, setAddress] = useState("")
 
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault()
-        onSubmit({
-            title,
-            description,
-            category,
-            location: {
-                lat: 51.505 + (Math.random() - 0.5) * 0.01, // Mock location near center
-                lng: -0.09 + (Math.random() - 0.5) * 0.01,
-                address: address || "Unknown Location",
-            },
-            imageUrl: "https://images.unsplash.com/photo-1541888946425-d81bb19240f5?auto=format&fit=crop&q=80&w=1000", // Mock image
-        })
-        setOpen(false)
-        setTitle("")
-        setDescription("")
-        setAddress("")
+    const [imageFile, setImageFile] = useState<File | null>(null)
+    const [videoFile, setVideoFile] = useState<File | null>(null)
+    const [audioBlob, setAudioBlob] = useState<Blob | null>(null)
+    const [isRecording, setIsRecording] = useState(false)
+    const [isUploading, setIsUploading] = useState(false)
+    const [showDetails, setShowDetails] = useState(false)
+
+    const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+    const audioChunksRef = useRef<Blob[]>([])
+
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, type: "image" | "video") => {
+        if (e.target.files && e.target.files[0]) {
+            if (type === "image") setImageFile(e.target.files[0])
+            if (type === "video") setVideoFile(e.target.files[0])
+        }
     }
+
+    const startRecording = async () => {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+            const mediaRecorder = new MediaRecorder(stream)
+            mediaRecorderRef.current = mediaRecorder
+            audioChunksRef.current = []
+
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    audioChunksRef.current.push(event.data)
+                }
+            }
+
+            mediaRecorder.onstop = () => {
+                const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" })
+                setAudioBlob(audioBlob)
+                stream.getTracks().forEach(track => track.stop())
+            }
+
+            mediaRecorder.start()
+            setIsRecording(true)
+        } catch (error) {
+            console.error("Error accessing microphone:", error)
+            alert("Could not access microphone")
+        }
+    }
+
+    const stopRecording = () => {
+        if (mediaRecorderRef.current && isRecording) {
+            mediaRecorderRef.current.stop()
+            setIsRecording(false)
+        }
+    }
+
+    const uploadFile = async (file: File | Blob, type: "image" | "video" | "audio") => {
+        const formData = new FormData()
+        formData.append("file", file, type === "audio" ? "recording.webm" : (file as File).name)
+        formData.append("type", type)
+
+        const res = await fetch("/api/upload", {
+            method: "POST",
+            body: formData,
+        })
+
+        if (!res.ok) throw new Error(`Failed to upload ${type}`)
+        const data = await res.json()
+        return data.url
+    }
+
+    const handleLocationClick = () => {
+        // Mock location for now
+        setAddress("123 Current Location St")
+    }
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault()
+        setIsUploading(true)
+
+        try {
+            let imageUrl, videoUrl, audioUrl
+
+            if (imageFile) imageUrl = await uploadFile(imageFile, "image")
+            if (videoFile) videoUrl = await uploadFile(videoFile, "video")
+            if (audioBlob) audioUrl = await uploadFile(audioBlob, "audio")
+
+            // Auto-generate title if missing
+            const finalTitle = title || `Report - ${new Date().toLocaleDateString()}`
+            const finalDescription = description || "No written description provided."
+
+            onSubmit({
+                title: finalTitle,
+                description: finalDescription,
+                category,
+                location: {
+                    lat: 51.505 + (Math.random() - 0.5) * 0.01,
+                    lng: -0.09 + (Math.random() - 0.5) * 0.01,
+                    address: address || "Unknown Location",
+                },
+                imageUrl,
+                videoUrl,
+                audioUrl,
+            })
+
+            setOpen(false)
+            setTitle("")
+            setDescription("")
+            setAddress("")
+            setImageFile(null)
+            setVideoFile(null)
+            setAudioBlob(null)
+            setShowDetails(false)
+        } catch (error) {
+            console.error("Error submitting report:", error)
+            alert("Failed to create report. Please try again.")
+        } finally {
+            setIsUploading(false)
+        }
+    }
+
+    const categories = [
+        { id: "infrastructure", label: "Road/Light", icon: Lightbulb },
+        { id: "sanitation", label: "Trash", icon: Trash2 },
+        { id: "safety", label: "Safety", icon: Shield },
+        { id: "other", label: "Other", icon: HelpCircle },
+    ]
 
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-                <Button className="gap-2 shadow-lg">
-                    <Plus className="h-4 w-4" /> Report Problem
+                <Button className="gap-2 shadow-lg rounded-full h-12 px-6">
+                    <Plus className="h-5 w-5" /> Report Problem
                 </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px]">
+            <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
                 <form onSubmit={handleSubmit}>
                     <DialogHeader>
-                        <DialogTitle>Report a Problem</DialogTitle>
-                        <DialogDescription>
-                            Describe the issue you see. Add photos or videos to help us understand.
+                        <DialogTitle className="text-center text-xl">What is the problem?</DialogTitle>
+                        <DialogDescription className="text-center">
+                            Tap an icon, take a photo, or record a message.
                         </DialogDescription>
                     </DialogHeader>
-                    <div className="grid gap-4 py-4">
-                        <div className="grid gap-2">
-                            <Label htmlFor="title">Title</Label>
-                            <Input
-                                id="title"
-                                placeholder="e.g. Broken Street Light"
-                                value={title}
-                                onChange={(e) => setTitle(e.target.value)}
-                                required
-                            />
+
+                    <div className="grid gap-6 py-6">
+                        {/* 1. Visual Category Selector */}
+                        <div className="grid grid-cols-2 gap-4">
+                            {categories.map((cat) => (
+                                <div
+                                    key={cat.id}
+                                    className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 cursor-pointer transition-all ${category === cat.id
+                                            ? "border-primary bg-primary/10"
+                                            : "border-muted hover:border-primary/50"
+                                        }`}
+                                    onClick={() => setCategory(cat.id)}
+                                >
+                                    <cat.icon className={`h-8 w-8 mb-2 ${category === cat.id ? "text-primary" : "text-muted-foreground"}`} />
+                                    <span className={`font-medium ${category === cat.id ? "text-primary" : "text-muted-foreground"}`}>
+                                        {cat.label}
+                                    </span>
+                                </div>
+                            ))}
                         </div>
-                        <div className="grid gap-2">
-                            <Label htmlFor="category">Category</Label>
-                            <select
-                                id="category"
-                                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                                value={category}
-                                onChange={(e) => setCategory(e.target.value)}
+
+                        {/* 2. Large Media Buttons */}
+                        <div className="grid grid-cols-2 gap-4">
+                            {/* Camera / Photo */}
+                            <div className="relative">
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    id="image-upload"
+                                    onChange={(e) => handleFileChange(e, "image")}
+                                />
+                                <Label
+                                    htmlFor="image-upload"
+                                    className={`flex flex-col items-center justify-center h-32 rounded-xl border-2 border-dashed cursor-pointer transition-all ${imageFile ? "border-primary bg-primary/10" : "border-muted hover:border-primary/50"
+                                        }`}
+                                >
+                                    <Camera className="h-8 w-8 mb-2 text-muted-foreground" />
+                                    <span className="text-sm font-medium text-muted-foreground">
+                                        {imageFile ? "Photo Added" : "Take Photo"}
+                                    </span>
+                                </Label>
+                                {imageFile && (
+                                    <div className="absolute top-2 right-2 cursor-pointer bg-destructive text-white rounded-full p-1" onClick={(e) => { e.preventDefault(); setImageFile(null); }}>
+                                        <X className="h-4 w-4" />
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Voice Recording */}
+                            <div
+                                className={`flex flex-col items-center justify-center h-32 rounded-xl border-2 cursor-pointer transition-all ${isRecording ? "border-destructive bg-destructive/10" : audioBlob ? "border-primary bg-primary/10" : "border-muted hover:border-primary/50"
+                                    }`}
+                                onClick={isRecording ? stopRecording : startRecording}
                             >
-                                <option value="infrastructure">Infrastructure</option>
-                                <option value="sanitation">Sanitation</option>
-                                <option value="safety">Safety</option>
-                                <option value="other">Other</option>
-                            </select>
+                                {isRecording ? (
+                                    <StopCircle className="h-10 w-10 mb-2 text-destructive animate-pulse" />
+                                ) : (
+                                    <Mic className={`h-8 w-8 mb-2 ${audioBlob ? "text-primary" : "text-muted-foreground"}`} />
+                                )}
+                                <span className={`text-sm font-medium ${isRecording ? "text-destructive" : audioBlob ? "text-primary" : "text-muted-foreground"}`}>
+                                    {isRecording ? "Stop Recording" : audioBlob ? "Message Recorded" : "Record Voice"}
+                                </span>
+                                {audioBlob && !isRecording && (
+                                    <div className="absolute top-2 right-2 cursor-pointer bg-destructive text-white rounded-full p-1" onClick={(e) => { e.stopPropagation(); setAudioBlob(null); }}>
+                                        <X className="h-4 w-4" />
+                                    </div>
+                                )}
+                            </div>
                         </div>
-                        <div className="grid gap-2">
-                            <Label htmlFor="address">Location (Address)</Label>
-                            <Input
-                                id="address"
-                                placeholder="e.g. 123 Main St"
-                                value={address}
-                                onChange={(e) => setAddress(e.target.value)}
-                                required
-                            />
-                        </div>
-                        <div className="grid gap-2">
-                            <Label htmlFor="description">Description</Label>
-                            <Textarea
-                                id="description"
-                                placeholder="Describe the problem in detail..."
-                                value={description}
-                                onChange={(e) => setDescription(e.target.value)}
-                                required
-                            />
-                        </div>
-                        <div className="flex gap-2">
-                            <Button type="button" variant="outline" size="icon" title="Add Photo">
-                                <Upload className="h-4 w-4" />
+
+                        {/* 3. Location Button */}
+                        <Button
+                            type="button"
+                            variant="outline"
+                            className="h-14 text-lg w-full flex items-center justify-center gap-2"
+                            onClick={handleLocationClick}
+                        >
+                            <MapPin className="h-6 w-6 text-primary" />
+                            {address || "Use My Location"}
+                        </Button>
+
+                        {/* 4. Optional Details Toggle */}
+                        <div className="text-center">
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setShowDetails(!showDetails)}
+                                className="text-muted-foreground"
+                            >
+                                {showDetails ? "Hide Details" : "Add More Details (Optional)"}
                             </Button>
-                            <Button type="button" variant="outline" size="icon" title="Add Voice Message">
-                                <Mic className="h-4 w-4" />
-                            </Button>
-                            <Button type="button" variant="outline" size="icon" title="Add Video">
-                                <Video className="h-4 w-4" />
-                            </Button>
                         </div>
+
+                        {showDetails && (
+                            <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
+                                <div className="grid gap-2">
+                                    <Label htmlFor="title">Title (Optional)</Label>
+                                    <Input
+                                        id="title"
+                                        placeholder="Short title"
+                                        value={title}
+                                        onChange={(e) => setTitle(e.target.value)}
+                                    />
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label htmlFor="description">Description (Optional)</Label>
+                                    <Textarea
+                                        id="description"
+                                        placeholder="Type more details here..."
+                                        value={description}
+                                        onChange={(e) => setDescription(e.target.value)}
+                                    />
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label>Video (Optional)</Label>
+                                    <Input
+                                        type="file"
+                                        accept="video/*"
+                                        onChange={(e) => handleFileChange(e, "video")}
+                                    />
+                                </div>
+                            </div>
+                        )}
                     </div>
+
                     <DialogFooter>
-                        <Button type="submit">Submit Report</Button>
+                        <Button type="submit" size="lg" className="w-full h-12 text-lg" disabled={isUploading}>
+                            {isUploading && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
+                            {isUploading ? "Sending..." : "Submit Report"}
+                        </Button>
                     </DialogFooter>
                 </form>
             </DialogContent>

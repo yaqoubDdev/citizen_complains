@@ -48,6 +48,27 @@ export function ProblemList({ problems, onUpvote }: ProblemListProps) {
                             </div>
                         )}
 
+                        {problem.videoUrl && (
+                            <div className="w-full bg-black">
+                                <video
+                                    src={problem.videoUrl}
+                                    controls
+                                    className="w-full max-h-[500px]"
+                                />
+                            </div>
+                        )}
+
+                        {problem.audioUrl && (
+                            <div className="p-4 bg-muted/30">
+                                <p className="text-xs font-medium mb-2 text-muted-foreground">Voice Message</p>
+                                <audio
+                                    src={problem.audioUrl}
+                                    controls
+                                    className="w-full"
+                                />
+                            </div>
+                        )}
+
                         <div className="flex items-center justify-between p-2 border-t mt-2">
                             <Button
                                 variant="ghost"

@@ -12,6 +12,8 @@ export interface Problem {
     status: "open" | "in-progress" | "resolved"
     createdAt: string
     imageUrl?: string
+    videoUrl?: string
+    audioUrl?: string
 }
 
 export interface User {
