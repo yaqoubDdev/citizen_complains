@@ -76,19 +76,13 @@ export function ReportModal({ onSubmit }: ReportModalProps) {
         }
     }
 
-    const uploadFile = async (file: File | Blob, type: "image" | "video" | "audio") => {
-        const formData = new FormData()
-        formData.append("file", file, type === "audio" ? "recording.webm" : (file as File).name)
-        formData.append("type", type)
-
-        const res = await fetch("/api/upload", {
-            method: "POST",
-            body: formData,
+    const convertToBase64 = (file: File | Blob): Promise<string> => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader()
+            reader.readAsDataURL(file)
+            reader.onload = () => resolve(reader.result as string)
+            reader.onerror = (error) => reject(error)
         })
-
-        if (!res.ok) throw new Error(`Failed to upload ${type}`)
-        const data = await res.json()
-        return data.url
     }
 
     const handleLocationClick = () => {
@@ -103,9 +97,10 @@ export function ReportModal({ onSubmit }: ReportModalProps) {
         try {
             let imageUrl, videoUrl, audioUrl
 
-            if (imageFile) imageUrl = await uploadFile(imageFile, "image")
-            if (videoFile) videoUrl = await uploadFile(videoFile, "video")
-            if (audioBlob) audioUrl = await uploadFile(audioBlob, "audio")
+            // Convert to Base64 instead of uploading to server
+            if (imageFile) imageUrl = await convertToBase64(imageFile)
+            if (videoFile) videoUrl = await convertToBase64(videoFile)
+            if (audioBlob) audioUrl = await convertToBase64(audioBlob)
 
             // Auto-generate title if missing
             const finalTitle = title || `Report - ${new Date().toLocaleDateString()}`
@@ -171,8 +166,8 @@ export function ReportModal({ onSubmit }: ReportModalProps) {
                                 <div
                                     key={cat.id}
                                     className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 cursor-pointer transition-all ${category === cat.id
-                                            ? "border-primary bg-primary/10"
-                                            : "border-muted hover:border-primary/50"
+                                        ? "border-primary bg-primary/10"
+                                        : "border-muted hover:border-primary/50"
                                         }`}
                                     onClick={() => setCategory(cat.id)}
                                 >
